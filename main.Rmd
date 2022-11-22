@@ -1,0 +1,119 @@
+---
+title: "Hyundai-OilDetection"
+output: html_document
+date: "2022-11-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Science Competition Hyundai Genuine Oil Detection
+
+### Summary
+
+Evaluate oil condition in heavy equipment by developing a binary classification machine learning model (i.e. normal, faulty)
+
+
+### Code
+
+We download and load the necessary packages below
+
+```{r}
+
+my_packages <- c("dplyr", "caret", "ROSE", "smotefamily", "ggplot2")
+
+lapply(my_packages, require, character.only = TRUE)
+
+```
+
+*Data Import*
+
+We import the datasets below
+```{r}
+
+train <- read.csv(file.path(getwd(),"Data","train.csv"))
+test <- read.csv(file.path(getwd(),"Data","test.csv"))
+sampleSubmission <- read.csv(file.path(getwd(),"Data","sample_submission.csv"))
+
+```
+
+
+Only select columns of the training data is available in the test data (and in actual work environment) therefore we only use relevant columns.
+
+```{r}
+
+#select only columns available in test for train
+train <- train %>% select(colnames(test),Y_LABEL)
+
+```
+
+### Exploratory Data Analysis
+
+```{r}
+#observe summary statistics
+summary(train)
+```
+
+Observing the summary statistics many variables are skewed to the left - the min and median values are mostly 0, whereas max values are high. We visualize this below.
+
+```{r}
+
+#store numeric independent variables
+
+
+#create dataframe with only numeric columns
+num_cols <- unlist(lapply(train, is.numeric))
+num_data <- train[,num_cols]
+
+#get column names and drop dependent variable
+num_cols <- colnames(num_data)
+num_cols <- num_cols[num_cols != "Y_LABEL"]
+
+for(var in num_cols){
+  plot(train[,var], train$Y_LABEL, xlab = var)
+}
+```
+
+### Class Imbalance
+
+
+We observe distribution of the binary dependent variable below.
+```{r}
+
+table(train$Y_LABEL)
+
+```
+
+We observe class imbalance. We utilize sampling methods to fix this below.
+
+1. Upsampling
+2. ROSE Sampling
+3. SMOTE Sampling
+
+```{r}
+
+# Upsampling
+
+
+# ROSE Sampling
+
+
+# SMOTE Sampling
+
+
+```
+
+
+### Model Building
+
+We explore different models below: neural network, gradient boosting, etc.
+
+```{r}
+
+
+
+```
+
+
+
