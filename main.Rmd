@@ -21,7 +21,11 @@ We download and load the necessary packages below
 
 ```{r}
 
-my_packages <- c("dplyr", "caret", "ROSE", "smotefamily", "ggplot2")
+#install.packages(c("dplyr", "caret","ggplot2",ROSE","smotefamily","keras","tensorflow"))
+install_tensorflow(version = "2.8.0")
+
+my_packages <- c("dplyr", "caret", "ROSE", "smotefamily", "ggplot2", "tensorflow", "keras")
+
 
 lapply(my_packages, require, character.only = TRUE)
 
@@ -32,30 +36,60 @@ lapply(my_packages, require, character.only = TRUE)
 We import the datasets below
 ```{r}
 
-train <- read.csv(file.path(getwd(),"Data","train.csv"))
-test <- read.csv(file.path(getwd(),"Data","test.csv"))
+oil_train <- read.csv(file.path(getwd(),"Data","train.csv"))
+oil_test <- read.csv(file.path(getwd(),"Data","test.csv"))
 sampleSubmission <- read.csv(file.path(getwd(),"Data","sample_submission.csv"))
 
 ```
 
+
+```{r}
+
+table(oil_train$Y_LABEL)
+oil_train$Y_LABEL <- as.factor(oil_train$Y_LABEL)
+table(oil_train$Y_LABEL)
+
+```
+
+
+### Data Processing
 
 Only select columns of the training data is available in the test data (and in actual work environment) therefore we only use relevant columns.
 
 ```{r}
 
 #select only columns available in test for train
-train <- train %>% select(colnames(test),Y_LABEL)
+oil_train <- oil_train %>% select(colnames(oil_test),Y_LABEL)
 
 ```
+
+```{r}
+
+#create dataframe with only numeric columns
+num_cols <- unlist(lapply(oil_train, is.numeric))
+num_data <- oil_train[,num_cols]
+
+#get column names and drop dependent variable
+num_cols <- colnames(num_data)
+num_cols <- num_cols[num_cols != "Y_LABEL"]
+
+for (var in num_cols) {
+  oil_train[[var]] <- as.numeric(oil_train[[var]])
+}
+
+```
+
+
 
 ### Exploratory Data Analysis
 
 ```{r}
 #observe summary statistics
-summary(train)
+summary(oil_train)
 ```
 
 Observing the summary statistics many variables are skewed to the left - the min and median values are mostly 0, whereas max values are high. We visualize this below.
+
 
 ```{r}
 
@@ -63,17 +97,27 @@ Observing the summary statistics many variables are skewed to the left - the min
 
 
 #create dataframe with only numeric columns
-num_cols <- unlist(lapply(train, is.numeric))
-num_data <- train[,num_cols]
+num_cols <- unlist(lapply(oil_train, is.numeric))
+num_data <- oil_train[,num_cols]
 
 #get column names and drop dependent variable
 num_cols <- colnames(num_data)
 num_cols <- num_cols[num_cols != "Y_LABEL"]
 
 for(var in num_cols){
-  plot(train[,var], train$Y_LABEL, xlab = var)
+  plot(oil_train[,var], oil_train$Y_LABEL, xlab = var)
 }
 ```
+
+```{r}
+
+#ggplot(oil_train, aes(x = COMPONENT_ARBITRARY, fill = factor(Y_LABEL))) + geom_bar() + theme_classic()
+
+#ggplot(oil_train, aes(x = factor(YEAR), fill = factor(Y_LABEL))) + geom_bar() + theme_classic()
+
+```
+
+
 
 ### Class Imbalance
 
@@ -81,11 +125,32 @@ for(var in num_cols){
 We observe distribution of the binary dependent variable below.
 ```{r}
 
-table(train$Y_LABEL)
+print("Y_LABEL")
+table(oil_train$Y_LABEL)
+
+print("Year")
+table(oil_train$YEAR)
+
+oil_train %>% group_by(YEAR) %>% summarize(NumObservation=n(),PropOil=sum(Y_LABEL==1)/n())
 
 ```
 
-We observe class imbalance. We utilize sampling methods to fix this below.
+
+
+### Train-Test-Split
+
+```{r}
+
+set.seed(1)
+part = createDataPartition(oil_train$Y_LABEL, p = 0.7, list=FALSE)
+train = oil_train[part,]
+test = oil_train[-part,]
+
+
+```
+
+
+We observe class imbalance. There are much more observations without oil than with oil. We utilize sampling methods to fix this below.
 
 1. Upsampling
 2. ROSE Sampling
@@ -93,27 +158,232 @@ We observe class imbalance. We utilize sampling methods to fix this below.
 
 ```{r}
 
-# Upsampling
-
-
-# ROSE Sampling
-
-
-# SMOTE Sampling
-
+train <- select(train,-ID)
+train <- select(train,-COMPONENT_ARBITRARY)
+test <- select(test, -ID)
+test <- select(test, -COMPONENT_ARBITRARY)
 
 ```
 
-
-### Model Building
-
-We explore different models below: neural network, gradient boosting, etc.
 
 ```{r}
 
+set.seed(1)
+# Upsampling
+up_train = upSample(x = train[,-ncol(train)], y = as.factor(train[,ncol(train)]))
+#change dependent variable name. default: class --> Y_LABEL
+colnames(up_train)[length(colnames(up_train))] <- "Y_LABEL"
+
+# ROSE Sampling
+rose_train = ROSE(Y_LABEL ~ ., data = train)$data
+
+# SMOTE Sampling
+smote_train = SMOTE(train[,1:17], train$Y_LABEL)$data
+#change dependent variable name. default: class --> Y_LABEL
+colnames(smote_train)[length(colnames(smote_train))] <- "Y_LABEL"
 
 
 ```
 
+```{r}
+
+print(paste("Number of Oil in Train Data: ", 
+            length(which(train$Y_LABEL == 1)), sep = " "))
+
+print(paste("Number of No Oil in Train Data: ",
+            length(which(train$Y_LABEL == 0)), sep = " "))
+
+print(paste("Number of Oil in Upsampling Data: ", 
+            length(which(up_train$Y_LABEL == 1)), sep = " "))
+
+print(paste("Number of No Oil in Upsampling Data: ",
+            length(which(up_train$Y_LABEL == 0)), sep = " "))
+
+print(paste("Number of Oil in ROSE Data: ", 
+            length(which(rose_train$Y_LABEL == 1)), sep = " "))
+
+print(paste("Number of No Oil in ROSE Data: ",
+            length(which(rose_train$Y_LABEL == 0)), sep = " "))
+
+print(paste("Number of Oil in SMOTE Data: ", 
+            length(which(smote_train$Y_LABEL == 1)), sep = " "))
+
+print(paste("Number of No Oil in SMOTE Data: ",
+            length(which(smote_train$Y_LABEL == 0)), sep = " "))
+
+```
+
+
+
+### XGBoost Prediction
+
+We build the *XGBoost* models below.
+
+```{r}
+#install.packages("xgboost")
+require(xgboost)
+```
+
+
+*Up Train Dataset*
+
+We first explore the up_train dataset
+```{r, error = FALSE, warning = FALSE}
+
+labels <- up_train$Y_LABEL
+labels <- as.numeric(as.character(labels))
+table(labels)
+
+xgbUpTrain <- subset(up_train, select = -c(Y_LABEL))
+
+xgbModel_up <- xgboost(data = data.matrix(xgbUpTrain), 
+                    label = labels,
+                    nround = 25,
+                    objective = "binary:logistic")
+
+testMatrix2 <- subset(test, select = -c(Y_LABEL))
+xgbClassPrediction <- predict(xgbModel_up, data.matrix(testMatrix2))
+xgbClassPrediction <- ifelse(xgbClassPrediction > 0.5, 1, 0)
+
+
+xgbDf <- data.frame(original = test$Y_LABEL, prediction = xgbClassPrediction)
+
+xgbDf$correct <- ifelse(xgbDf$original == xgbDf$prediction, 1, 0)
+
+print(paste("Accuracy:", length(which(xgbDf$correct == 1)) / nrow(xgbDf)))
+
+```
+
+*SMOTE Dataset*
+
+```{r}
+
+labels <- smote_train$Y_LABEL
+labels <- as.numeric(as.character(labels))
+table(labels)
+
+xgbSMOTETrain <- subset(smote_train, select = -c(Y_LABEL))
+
+xgbModel_SMOTE <- xgboost(data = data.matrix(xgbSMOTETrain), 
+                    label = labels,
+                    nround = 25,
+                    objective = "binary:logistic")
+
+xgbClassPrediction <- predict(xgbModel_SMOTE, data.matrix(testMatrix2))
+xgbClassPrediction <- ifelse(xgbClassPrediction > 0.5, 1, 0)
+
+
+xgbDf <- data.frame(original = test$Y_LABEL, prediction = xgbClassPrediction)
+
+xgbDf$correct <- ifelse(xgbDf$original == xgbDf$prediction, 1, 0)
+
+print(paste("Accuracy:", length(which(xgbDf$correct == 1)) / nrow(xgbDf)))
+
+```
+
+*ROSE Dataset*
+
+```{r}
+
+labels <- rose_train$Y_LABEL
+labels <- as.numeric(as.character(labels))
+table(labels)
+
+xgbROSETrain <- subset(rose_train, select = -c(Y_LABEL))
+
+xgbModel <- xgboost(data = data.matrix(xgbROSETrain), 
+                    label = labels,
+                    nround = 25,
+                    objective = "binary:logistic")
+
+xgbClassPrediction <- predict(xgbModel, data.matrix(testMatrix2))
+xgbClassPrediction <- ifelse(xgbClassPrediction > 0.5, 1, 0)
+
+
+xgbDf <- data.frame(original = test$Y_LABEL, prediction = xgbClassPrediction)
+
+xgbDf$correct <- ifelse(xgbDf$original == xgbDf$prediction, 1, 0)
+
+print(paste("Accuracy:", length(which(xgbDf$correct == 1)) / nrow(xgbDf)))
+
+```
+
+
+The SMOTE dataset performs the most. We explore the optimal cutoff below.
+
+### Optimal Cutoff
+
+```{r}
+
+xgbClassPrediction <- predict(xgbModel_SMOTE, data.matrix(testMatrix2))
+
+cutoff = seq(min(xgbClassPrediction),max(xgbClassPrediction),.001)
+
+performance = setNames(data.frame(matrix(ncol = 8, nrow = length(cutoff))), c("Cutoff","TN", "FN", "TP", "FP", "Sensitivity", "Specificity","Accuracy"))
+performance$Cutoff = cutoff
+
+
+for (i in 1:length(cutoff)){
+  #temp = table(xgbClassPrediction > performance$Cutoff[i], test$Y_LABEL)
+  tempConf <- confusionMatrix(as.factor(as.integer(xgbClassPrediction > performance$Cutoff[i])), as.factor(test$Y_LABEL),positive="1")
+  temp = tempConf$table
+  TN = temp[1,1]
+  FN = temp[1,2]
+  FP = temp[2,1]
+  TP = temp[2,2]
+  performance$TN[i] = TN
+  performance$TP[i] = TP
+  performance$FN[i] = FN
+  performance$FP[i] = FP
+  performance$Sensitivity[i] = TP/(FN+TP)
+  performance$Specificity[i] = TN/(TN+FP)
+  performance$Accuracy[i] = (TP+TN)/(FP+FN+TP+TN)
+}
+
+```
+
+
+
+
+### Final Prediction
+
+**We retrain with entire dataset and make prediction of test data below**
+
+```{r}
+
+set.seed(1)
+
+# SMOTE Sampling
+smote_train_whole = SMOTE(oil_train[,3:19], oil_train$Y_LABEL)$data
+#change dependent variable name. default: class --> Y_LABEL
+colnames(smote_train_whole)[length(colnames(smote_train_whole))] <- "Y_LABEL"
+
+
+labels_whole <- smote_train_whole$Y_LABEL
+labels_whole <- as.numeric(as.character(labels_whole))
+
+xgbSMOTE_whole <- subset(smote_train_whole, select = -c(Y_LABEL))
+
+xgbModel_whole <- xgboost(data = data.matrix(xgbSMOTE_whole), 
+                    label = labels_whole,
+                    nround = 25,
+                    objective = "binary:logistic")
+
+
+oil_test2 <- subset(oil_test, select=-c(ID,COMPONENT_ARBITRARY))
+
+# make predictions on test
+smote_prediction <- predict(xgbModel_whole, data.matrix(oil_test2))
+
+smote_prediction <- ifelse(smote_prediction > 0.5, 1, 0)
+
+submission <- data.frame(ID = oil_test$ID,
+                         Y_LABEL = smote_prediction)
+
+
+#export file
+write.csv(submission,"/Users/chejeong/Desktop/initialsubmission.csv")
+
+```
 
 
